@@ -55,8 +55,9 @@ def export_to_word(exam_data, config, exam_count=1):
         
         doc.add_paragraph()
         
-        # TODO: 这里需要添加试卷内容生成逻辑
-        # 由于内容较长，实际实现需要根据exam_data生成试卷内容
+        # 添加试卷内容
+        content_para = doc.add_paragraph()
+        content_para.add_run(exam_data['exam_content'])
         
         # 添加分页符
         doc.add_page_break()
@@ -86,12 +87,20 @@ def export_to_word(exam_data, config, exam_count=1):
                 p_judgment.add_run(_format_answers(judgment_answers))
                 p_judgment.paragraph_format.space_after = Pt(12)
             
-            mcq_answers = [ans[1] for ans in all_answers if ans[1] in ['A', 'B', 'C', 'D', 'E']]
+            mcq_answers = [ans[1] for ans in all_answers if ans[1] in ['A', 'B', 'C', 'D', 'E'] and len(ans[1]) == 1]
             if mcq_answers:
                 p_mcq = doc.add_paragraph()
                 p_mcq.add_run("单选题答案: ")
                 p_mcq.add_run(_format_answers(mcq_answers))
                 p_mcq.paragraph_format.space_after = Pt(12)
+            
+            # 添加多选题答案
+            mcq_multi_answers = [ans[1] for ans in all_answers if len(ans[1]) > 1]
+            if mcq_multi_answers:
+                p_mcq_multi = doc.add_paragraph()
+                p_mcq_multi.add_run("多选题答案: ")
+                p_mcq_multi.add_run(_format_answers(mcq_multi_answers))
+                p_mcq_multi.paragraph_format.space_after = Pt(12)
         
         # 保存文档
         if exam_count > 1 or exam_num == 1:

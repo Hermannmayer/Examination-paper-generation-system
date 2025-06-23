@@ -64,7 +64,7 @@ class ExamCore:
             raise ValueError("请先加载题库！")
         
         # 验证设置
-        if not (config['include_judgment'] or config['include_mcq']):
+        if not (config['include_judgment'] or config['include_mcq'] or config['include_mcq_multi']):
             raise ValueError("请至少选择一种试题类型！")
         
         # 生成试卷数据
@@ -86,9 +86,14 @@ class ExamCore:
             if judgment_answers:
                 exam_content += f"判断题答案: {self._format_answers(judgment_answers)}\n"
             
-            mcq_answers = [ans[1] for ans in all_answers if ans[1] in ['A', 'B', 'C', 'D', 'E']]
+            mcq_answers = [ans[1] for ans in all_answers if ans[1] in ['A', 'B', 'C', 'D', 'E'] and len(ans[1]) == 1]
             if mcq_answers:
                 exam_content += f"单选题答案: {self._format_answers(mcq_answers)}\n"
+            
+            # 添加多选题答案
+            mcq_multi_answers = [ans[1] for ans in all_answers if len(ans[1]) > 1]
+            if mcq_multi_answers:
+                exam_content += f"多选题答案: {self._format_answers(mcq_multi_answers)}\n"
         
         return exam_content, total_count
     
@@ -98,11 +103,11 @@ class ExamCore:
             raise ValueError("请先加载题库！")
         
         # 验证设置
-        if not (config['include_judgment'] or config['include_mcq']):
+        if not (config['include_judgment'] or config['include_mcq'] or config['include_mcq_multi']):
             raise ValueError("请至少选择一种试题类型！")
         
         # 生成试卷内容
-        _, all_answers, total_count = self._generate_exam_content(config)
+        exam_content, all_answers, total_count = self._generate_exam_content(config)
         
         # 返回试卷数据
         return {
@@ -110,7 +115,8 @@ class ExamCore:
             'student_name': config['student_name'],
             'include_answers': config['include_answers'],
             'all_answers': all_answers,
-            'total_count': total_count
+            'total_count': total_count,
+            'exam_content': exam_content  # 添加试卷内容
         }
     
     def _generate_exam_content(self, config):
@@ -129,6 +135,8 @@ class ExamCore:
                 sections.append(('判断题', config['judgment_count']))
             if config['include_mcq']:
                 sections.append(('单选题', config['mcq_count']))
+            if config['include_mcq_multi']:
+                sections.append(('多选题', config['mcq_multi_count']))
             
             # 根据用户选择调整顺序
             if config['type_order'] == "单选题→判断题" and len(sections) > 1:
@@ -182,6 +190,42 @@ class ExamCore:
                     # 添加题目
                     for _, row in selected_mcq.iterrows():
                         preview_content += f"{question_counter}. {row['题目']} [单选题]\n"
+                        
+                        # 添加选项
+                        options = []
+                        for option in ['A', 'B', 'C', 'D', 'E']:
+                            option_col = f"选项{option}"
+                            if option_col in row and pd.notna(row[option_col]) and row[option_col].strip():
+                                # 清理选项格式
+                                option_text = row[option_col].strip()
+                                if option_text.startswith('[') and option_text[1:2].isalpha() and option_text[2:3] == ']':
+                                    option_text = option_text[3:].strip()
+                                options.append(f"{option}. {option_text}")
+                        
+                        preview_content += "   " + "    ".join(options) + "\n\n"
+                        
+                        # 确保答案是字符串
+                        answer = str(row['正确答案']).strip()
+                        all_answers.append((question_counter, answer))
+                        question_counter += 1
+                
+                elif section_type == '多选题':
+                    # 多选题部分
+                    preview_content += f"{question_counter}. 多选题（每题2分，共{section_count * 2}分）\n\n"
+                    mcq_multi_questions = self.exam_data[self.exam_data["题型"] == "多选题"]
+                    
+                    if len(mcq_multi_questions) < section_count:
+                        section_count = len(mcq_multi_questions)
+                    
+                    # 抽取题目
+                    if config['random_order']:
+                        selected_mcq_multi = mcq_multi_questions.sample(section_count)
+                    else:
+                        selected_mcq_multi = mcq_multi_questions.head(section_count)
+                    
+                    # 添加题目
+                    for _, row in selected_mcq_multi.iterrows():
+                        preview_content += f"{question_counter}. {row['题目']} [多选题]\n"
                         
                         # 添加选项
                         options = []
@@ -207,13 +251,16 @@ class ExamCore:
             
             # 计算各题型数量
             judgment_count = max(1, int(total_count * config['judgment_ratio'] / 100))
-            mcq_count = total_count - judgment_count
+            mcq_count = max(1, int(total_count * config['mcq_ratio'] / 100))
+            mcq_multi_count = total_count - judgment_count - mcq_count
             
             sections = []
             if config['include_judgment']:
                 sections.append(('判断题', judgment_count))
             if config['include_mcq']:
                 sections.append(('单选题', mcq_count))
+            if config['include_mcq_multi']:
+                sections.append(('多选题', mcq_multi_count))
             
             # 根据用户选择调整顺序
             if config['type_order'] == "单选题→判断题" and len(sections) > 1:
@@ -285,6 +332,42 @@ class ExamCore:
                         answer = str(row['正确答案']).strip()
                         all_answers.append((question_counter, answer))
                         question_counter += 1
+                
+                elif section_type == '多选题':
+                    # 多选题部分
+                    preview_content += f"{question_counter}. 多选题（每题2分，共{section_count * 2}分）\n\n"
+                    mcq_multi_questions = self.exam_data[self.exam_data["题型"] == "多选题"]
+                    
+                    if len(mcq_multi_questions) < section_count:
+                        section_count = len(mcq_multi_questions)
+                    
+                    # 抽取题目
+                    if config['random_order']:
+                        selected_mcq_multi = mcq_multi_questions.sample(section_count)
+                    else:
+                        selected_mcq_multi = mcq_multi_questions.head(section_count)
+                    
+                    # 添加题目
+                    for _, row in selected_mcq_multi.iterrows():
+                        preview_content += f"{question_counter}. {row['题目']} [多选题]\n"
+                        
+                        # 添加选项
+                        options = []
+                        for option in ['A', 'B', 'C', 'D', 'E']:
+                            option_col = f"选项{option}"
+                            if option_col in row and pd.notna(row[option_col]) and row[option_col].strip():
+                                # 清理选项格式
+                                option_text = row[option_col].strip()
+                                if option_text.startswith('[') and option_text[1:2].isalpha() and option_text[2:3] == ']':
+                                    option_text = option_text[3:].strip()
+                                options.append(f"{option}. {option_text}")
+                        
+                        preview_content += "   " + "    ".join(options) + "\n\n"
+                        
+                        # 确保答案是字符串
+                        answer = str(row['正确答案']).strip()
+                        all_answers.append((question_counter, answer))
+                        question_counter += 1
         
         elif config['export_mode'] == "顺序导出":
             # 获取题目范围
@@ -292,6 +375,8 @@ class ExamCore:
             judgment_end = config['judgment_end']
             mcq_start = config['mcq_start']
             mcq_end = config['mcq_end']
+            mcq_multi_start = config['mcq_multi_start']
+            mcq_multi_end = config['mcq_multi_end']
             
             # 验证范围
             if config['include_judgment'] and judgment_start > judgment_end:
@@ -299,6 +384,9 @@ class ExamCore:
             
             if config['include_mcq'] and mcq_start > mcq_end:
                 raise ValueError("单选题起始题号不能大于结束题号！")
+            
+            if config['include_mcq_multi'] and mcq_multi_start > mcq_multi_end:
+                raise ValueError("多选题起始题号不能大于结束题号！")
             
             sections = []
             if config['include_judgment']:
@@ -308,6 +396,10 @@ class ExamCore:
             if config['include_mcq']:
                 mcq_count = mcq_end - mcq_start + 1
                 sections.append(('单选题', mcq_count, mcq_start, mcq_end))
+            
+            if config['include_mcq_multi']:
+                mcq_multi_count = mcq_multi_end - mcq_multi_start + 1
+                sections.append(('多选题', mcq_multi_count, mcq_multi_start, mcq_multi_end))
             
             # 根据用户选择调整顺序
             if config['type_order'] == "单选题→判断题" and len(sections) > 1:
@@ -360,6 +452,39 @@ class ExamCore:
                     
                     for _, row in mcq_questions.iterrows():
                         preview_content += f"{question_counter}. {row['题目']} [单选题]\n"
+                        
+                        # 添加选项
+                        options = []
+                        for option in ['A', 'B', 'C', 'D', 'E']:
+                            option_col = f"选项{option}"
+                            if option_col in row and pd.notna(row[option_col]) and row[option_col].strip():
+                                # 清理选项格式
+                                option_text = row[option_col].strip()
+                                if option_text.startswith('[') and option_text[1:2].isalpha() and option_text[2:3] == ']':
+                                    option_text = option_text[3:].strip()
+                                options.append(f"{option}. {option_text}")
+                        
+                        preview_content += "   " + "    ".join(options) + "\n\n"
+                        
+                        # 确保答案是字符串
+                        answer = str(row['正确答案']).strip()
+                        all_answers.append((question_counter, answer))
+                        question_counter += 1
+                
+                elif section_type == '多选题':
+                    # 多选题部分
+                    preview_content += f"{question_counter}. 多选题（每题2分，共{section_count * 2}分）\n\n"
+                    mcq_multi_questions = self.exam_data[
+                        (self.exam_data["题型"] == "多选题") & 
+                        (self.exam_data['题号'] >= start_num) & 
+                        (self.exam_data['题号'] <= end_num)
+                    ]
+                    
+                    # 按题号排序
+                    mcq_multi_questions = mcq_multi_questions.sort_values('题号')
+                    
+                    for _, row in mcq_multi_questions.iterrows():
+                        preview_content += f"{question_counter}. {row['题目']} [多选题]\n"
                         
                         # 添加选项
                         options = []

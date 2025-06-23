@@ -12,10 +12,16 @@
 
 from gui import ExamGeneratorGUI
 import tkinter as tk
+from config import VERSION
 
 def main():
     root = tk.Tk()
     app = ExamGeneratorGUI(root)
+    
+    # 控制台打印版本信息
+    print(f"考试试卷生成系统 v{VERSION}")
+    print("Copyright © 2023 考试系统开发团队")
+    
     root.mainloop()
 
 if __name__ == "__main__":
