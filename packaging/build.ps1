@@ -1,4 +1,4 @@
-# 考试试卷生成系统 —— 打包脚本
+﻿# 考试试卷生成系统 —— 打包脚本
 #
 # 用法（在项目根目录执行）：
 #   powershell -ExecutionPolicy Bypass -File packaging\build.ps1
@@ -52,13 +52,20 @@ Write-Host "  onedir 体积: $SizeMiB MiB" -ForegroundColor Green
 if (-not $SkipSelfTest) {
     Write-Step "打包产物冒烟自检"
     $Report = Join-Path $env:TEMP 'exampaper_selftest.txt'
+    Remove-Item $Report -ErrorAction SilentlyContinue
     $env:EXAM_SELFTEST = $Report
-    & $ExePath | Out-Null
-    $code = $LASTEXITCODE
+
+    # 必须用 Start-Process -Wait：本程序是 GUI 应用（console=False），
+    # PowerShell 用 & 调用 GUI 程序不会等待，报告来不及生成就返回了。
+    $proc = Start-Process -FilePath $ExePath -Wait -PassThru
+    $code = $proc.ExitCode
     Remove-Item Env:\EXAM_SELFTEST -ErrorAction SilentlyContinue
 
     if (Test-Path $Report) {
         Get-Content $Report -Encoding UTF8 | ForEach-Object { Write-Host "  $_" }
+    } else {
+        Write-Host "  自检没有生成报告文件" -ForegroundColor Red
+        $code = 1
     }
     if ($code -ne 0) { throw "打包自检未通过（报告：$Report）" }
     Write-Host "  自检全部通过" -ForegroundColor Green

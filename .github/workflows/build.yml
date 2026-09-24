@@ -43,12 +43,25 @@ jobs:
           # 这一步是关键：某些依赖只在运行时的冷路径上才被 import
           # （例如 openpyxl 会 import numpy），开发机上的单元测试跑不到，
           # 必须在**真实产物**上验一遍。字体缺失会被判为「跳过」而非失败。
+          #
+          # 必须用 Start-Process -Wait：本程序是 GUI 应用（console=False），
+          # PowerShell 用 & 调用 GUI 程序**不会等待**，命令会立刻返回，
+          # 自检报告根本来不及生成。
           $report = Join-Path $env:TEMP "selftest.txt"
           $env:EXAM_SELFTEST = $report
-          & "dist\ExamPaperGenerator\ExamPaperGenerator.exe"
-          $code = $LASTEXITCODE
-          Get-Content $report -Encoding UTF8
-          if ($code -ne 0) { throw "打包自检未通过" }
+
+          $exe = Resolve-Path "dist\ExamPaperGenerator\ExamPaperGenerator.exe"
+          $proc = Start-Process -FilePath $exe -Wait -PassThru
+          $code = $proc.ExitCode
+          Remove-Item Env:\EXAM_SELFTEST -ErrorAction SilentlyContinue
+
+          if (Test-Path $report) {
+            Get-Content $report -Encoding UTF8
+          } else {
+            Write-Host "自检没有生成报告文件"
+            $code = 1
+          }
+          if ($code -ne 0) { throw "打包自检未通过（退出码 $code）" }
 
       - name: 安装 Inno Setup
         run: choco install innosetup --yes --no-progress
