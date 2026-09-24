@@ -125,10 +125,14 @@ end;
   想要中文向导界面？
   1. 从 https://jrsoftware.org/files/istrans/ 下载 ChineseSimplified.isl
   2. 放到 Inno Setup 安装目录的 Languages\ 子目录下
-  3. 在本文件 [Setup] 段之后加上：
+  3. 在本文件末尾追加一个语言段落，内容为：
 
-     [Languages]
-     Name: "chinese"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
+         Languages
+         Name: "chinese"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
 
-  未加是因为该文件不随 Inno 6 默认分发，直接引用会导致编译失败。
+     实际书写时，Languages 那一行要用方括号包起来。
+
+  上面刻意没有直接写出带方括号的那一行 —— Inno Setup 的解析器**按行扫描节标题**，
+  哪怕这一行位于 Pascal 注释内部，行首的方括号也会被当成真正的节，
+  于是它去加载一个不存在的语言文件，编译直接失败。这个坑已经踩过一次。
   ============================================================================ }
