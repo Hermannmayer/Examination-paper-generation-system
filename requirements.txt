@@ -1,3 +1,14 @@
-pandas>=1.3.0
-python-docx>=0.8.11
+# 运行依赖
 openpyxl>=3.0.0
+python-docx>=0.8.11
+reportlab>=4.0
+pywebview>=5.0
+
+# 开发/测试依赖（打包时不包含）
+# pytest>=8.0
+# pypdf>=4.0
+#
+# 打包注意：构建脚本会显式排除 numpy 与 pandas
+#   --exclude-module numpy --exclude-module pandas
+# 即使 openpyxl 内部会 import numpy（openpyxl/utils/dataframe.py），
+# 排除后 xlsx 读取依然正常。实测 onefile 体积 35.4 MiB -> 16.2 MiB。

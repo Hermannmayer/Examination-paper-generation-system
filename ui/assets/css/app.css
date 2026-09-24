@@ -1,0 +1,1050 @@
+/* ==========================================================================
+   考试试卷生成系统 —— 分屏布局风格
+   ==========================================================================
+
+   严格遵循 Style Kit「分屏布局 / split-screen」。逐条对应：
+
+   | 规范                                   | 实现位置                     |
+   |----------------------------------------|------------------------------|
+   | rounded-none / shadow-none             | 全局重置（见下）             |
+   | grid-cols-1 / lg:grid-cols-2           | .split                       |
+   | 面板 min-h-[50vh] / lg:min-h-screen    | .panel                       |
+   | 配色 #000 / #fff + 四个强调色          | :root 变量                   |
+   | 按钮 px-8 py-4 font-semibold           | .btn                         |
+   | 输入框 border-b-2 / focus 转黑         | .input                       |
+   | 反向配重聚焦（另一侧降饱和）           | .split:has(...)              |
+   | 中央分割线焦点时短暂增强               | .split__seam                 |
+   | 正文禁 translate / scale               | 全文件无 transform 作用于文本 |
+   | prefers-reduced-motion 备选            | 文件末尾                     |
+
+   有意不用 Tailwind CDN、不引 Node 构建：本地单机工具必须离线可用、零构建依赖。
+   ========================================================================== */
+
+:root {
+  --bg: #08131f;           /* 页面底色，最深 */
+  --bg-panel: #0f2137;     /* 配置面板：深海军蓝（原先的纯黑对比过强） */
+  --bg-panel-raised: #14304c;
+  --fg: #ffffff;
+  --paper: #ffffff;
+  --ink: #18181b;          /* zinc-900 */
+  --ink-muted: #71717a;    /* zinc-500 —— 只用于 #fff 底，对比度 4.7:1 */
+  --rule: #d4d4d8;         /* zinc-300 */
+  --rule-dark: #2a4058;    /* 深蓝底上的分隔线 */
+  --fg-muted: #9db2c9;     /* 深蓝底上的弱化文字，对 #0f2137 约 8:1 */
+  --fg-faint: #7b92ab;
+
+  /* 强调色（Style Kit 指定，不在需要靠颜色传递信息的地方使用） */
+  --accent-red: #ff4757;
+  --accent-green: #2ed573;
+  --accent-blue: #1e90ff;
+  --accent-amber: #ffa502;
+
+  /* 注意：字体栈刻意避开 Inter / Roboto / Geist —— Style Kit 明令禁止 */
+  --font-ui: "Segoe UI", "Microsoft YaHei", "PingFang SC", "Hiragino Sans GB",
+             "Source Han Sans SC", "Noto Sans CJK SC", sans-serif;
+  --font-doc: "SimSun", "宋体", "Songti SC", "Noto Serif CJK SC", serif;
+  --font-mono: "Cascadia Mono", "Consolas", "SFMono-Regular", monospace;
+
+  /* 锐利的编辑式切换：短促、无缓动曲线 */
+  --switch: 120ms linear;
+  /* 面板级降饱和：缓慢、克制 */
+  --weigh: 500ms ease-out;
+}
+
+/* ── 全局重置：rounded-none / shadow-none ───────────────────────────── */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  border-radius: 0;      /* 禁止 rounded-*：分屏靠对比分割，不靠圆角 */
+  box-shadow: none;      /* 禁止 shadow-*：不使用投影 */
+}
+
+/* 必须显式声明：下面 .field-group 等规则里的 display:flex 会盖过浏览器
+   默认的 [hidden] { display: none }，导致该隐藏的区块仍然显示出来。 */
+[hidden] {
+  display: none !important;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 桌面端把整页做成「分屏撑满 + 状态栏占一行」的纵向布局。
+   早期状态栏是 position:fixed，会盖住面板底部的操作按钮 ——
+   这也是用户反馈「底部统计遮挡界面」的原因。 */
+@media (min-width: 1024px) {
+  body {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    overflow: hidden;
+  }
+}
+
+/* 正文行宽 65–75 字符，保证可读性 */
+p, li, .doc__body {
+  max-width: 72ch;
+}
+
+/* ── 分屏骨架 ───────────────────────────────────────────────────────── */
+
+.split {
+  display: grid;
+  grid-template-columns: 1fr;          /* grid-cols-1：窄屏堆叠 */
+  min-height: 100vh;
+  position: relative;
+}
+
+@media (min-width: 1024px) {
+  .split {
+    grid-template-columns: 1fr 1fr;    /* lg:grid-cols-2：桌面左右分屏 */
+    flex: 1 1 auto;
+    min-height: 0;
+    height: auto;
+  }
+}
+
+.panel {
+  min-height: 50vh;                    /* 移动端 min-h-[50vh] */
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  transition: filter var(--weigh);
+}
+
+@media (min-width: 1024px) {
+  .panel {
+    /* 用 100% 而不是 100vh：body 是「分屏 + 状态栏」的纵向 flex 布局，
+       分屏区高度是 100vh 减去状态栏那一行。写 100vh 会让面板探出分屏区，
+       把页脚压到状态栏上。 */
+    height: 100%;
+    overflow: hidden;
+  }
+}
+
+/* 窄屏时预览在前（规范：移动端视觉面板在前） */
+.panel--preview {
+  order: -1;
+}
+
+@media (min-width: 1024px) {
+  .panel--preview {
+    order: 0;
+  }
+}
+
+/* 内容侧：深蓝底白字 */
+.panel--config {
+  background: var(--bg-panel);
+  color: var(--fg);
+}
+
+/* 视觉侧：白底，像一张纸 */
+.panel--preview {
+  background: var(--paper);
+  color: var(--ink);
+}
+
+/* 页头与页脚固定在两端，只有 .panel__body 滚动。
+   早期版本用 position:sticky + 负 margin 做操作栏，结果它浮在表单中间
+   把下面的字段盖住了 —— 看起来就像界面错乱。 */
+.panel__head {
+  flex: 0 0 auto;
+  padding: 24px 24px 10px;
+}
+
+@media (min-width: 1024px) {
+  .panel__head {
+    padding: 32px 64px 12px;
+  }
+}
+
+.panel__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 6px 24px 40px;
+}
+
+@media (min-width: 1024px) {
+  .panel__body {
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 6px 64px 40px;
+  }
+}
+
+.panel__body--preview {
+  background: var(--paper);
+  padding-top: 18px;
+}
+
+/* ── 中央分割线：焦点变化时短暂增强，幅度保持极简 ──────────────────── */
+
+.split__seam {
+  display: none;
+}
+
+@media (min-width: 1024px) {
+  .split__seam {
+    display: block;
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 50%;
+    width: 1px;
+    background: var(--rule);
+    opacity: 0.35;
+    transition: opacity var(--switch), background-color var(--switch);
+    pointer-events: none;
+    z-index: 5;
+  }
+
+  .split:has(.panel:hover) .split__seam {
+    opacity: 1;
+    background: var(--ink);
+  }
+
+  /* 反向配重聚焦：hover 一侧时，另一侧降饱和、退到背景里 */
+  .split:has(.panel--config:hover) .panel--preview,
+  .split:has(.panel--preview:hover) .panel--config {
+    filter: saturate(0.3);
+  }
+
+  /* 正在输入时同样让另一侧后退 */
+  .split:has(.panel--config:focus-within) .panel--preview {
+    filter: saturate(0.3);
+  }
+}
+
+/* ── 标题 ───────────────────────────────────────────────────────────── */
+
+.display {
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.02em;             /* tracking-tight */
+  line-height: 1.2;
+  margin: 0 0 6px;
+}
+
+.display--sm {
+  font-size: 20px;
+}
+
+.panel__head {
+  margin-bottom: 24px;
+}
+
+.panel__sub,
+.hint {
+  color: var(--ink-muted);
+  font-size: 12px;
+  margin: 6px 0 0;
+  line-height: 1.6;
+}
+
+.panel--config .panel__sub,
+.panel--config .hint {
+  color: var(--fg-muted);              /* 深蓝底上的弱化文字，约 8:1 对比度 */
+}
+
+.hint--muted {
+  color: var(--fg-faint) !important;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.hint--inline {
+  display: inline;
+  margin: 0;
+}
+
+.hint strong {
+  color: var(--fg);
+  font-weight: 600;
+}
+
+/* 难度 / 知识点的标签列表 */
+.chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+}
+
+.chip-list:empty::after {
+  content: "（题库中未提供该列）";
+  color: var(--fg-faint);
+  font-size: 12px;
+}
+
+/* 考点多的题库（几百上千个）靠「固定高度 + 滚动」兜住，
+   否则单是渲染列表就能把配置面板撑到几屏长。 */
+.chip-list--scroll {
+  max-height: 190px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  align-content: flex-start;
+  padding: 6px;
+  border: 1px solid var(--rule-dark);
+}
+
+.chip-list--scroll .check {
+  flex: 0 0 auto;
+}
+
+.chip-list__more {
+  flex: 0 0 100%;
+  color: var(--fg-faint);
+  font-size: 11.5px;
+}
+
+/* 搜索框：比普通输入框更轻，不喧宾夺主 */
+.input--search {
+  border-bottom-width: 1px;
+  font-size: 13px;
+  padding: 5px 2px;
+}
+
+.chip-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+
+/* 「清除题库」这类次要但有用的操作：比 ghost 更弱一档 */
+.btn--subtle {
+  color: var(--fg-muted);
+  outline-color: var(--rule-dark);
+}
+
+.btn--subtle:hover:not(:disabled) {
+  color: var(--bg);
+  background: var(--fg);
+  outline-color: var(--fg);
+}
+
+.btn--subtle:disabled {
+  opacity: 0.35;
+}
+
+.group-title {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin: 0 0 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--rule-dark);
+}
+
+.panel--preview .group-title {
+  border-bottom-color: var(--rule);
+}
+
+/* ── 表单 ───────────────────────────────────────────────────────────── */
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+}
+
+.field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.field__label {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.row {
+  display: flex;
+  gap: 12px;
+  align-items: flex-end;
+}
+
+.row--file {
+  align-items: stretch;
+}
+
+.field--half {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+/* 输入框：只有下边框，focus 转黑（规范 border-b-2 + focus:border-black） */
+.input {
+  width: 100%;
+  padding: 8px 2px;
+  font-family: inherit;
+  font-size: 14px;
+  color: var(--fg);
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid var(--rule-dark);
+  transition: border-color var(--switch);
+}
+
+.input:focus {
+  outline: none;
+  border-bottom-color: var(--accent-blue);
+}
+
+.input::placeholder {
+  color: #71717a;
+}
+
+.input[readonly] {
+  color: #d4d4d8;
+  cursor: default;
+}
+
+.input--file {
+  font-size: 12px;
+  font-family: var(--font-mono);
+}
+
+/* 刻意不用 appearance:none + 渐变箭头 —— Style Kit 禁止渐变，
+   保留原生下拉箭头反而更可预期。 */
+.input--select {
+  padding-right: 4px;
+  cursor: pointer;
+  background: transparent;
+}
+
+.input--select option {
+  background: var(--bg-panel);
+  color: var(--fg);
+}
+
+.panel--preview .input {
+  color: var(--ink);
+  border-bottom-color: var(--rule);
+}
+
+/* 复选框 */
+.check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  cursor: pointer;
+  user-select: none;
+}
+
+/* 复选框：勾选后显示明确的白色对勾。
+   早期只有「填充成白块」一种反馈，用户分不清有没有选中。 */
+.check input {
+  appearance: none;
+  width: 17px;
+  height: 17px;
+  margin: 0;
+  border: 2px solid var(--rule-dark);
+  background-color: transparent;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 0 0;
+  cursor: pointer;
+  flex: none;
+  transition: background-color var(--switch), border-color var(--switch),
+              background-size var(--switch);
+}
+
+.check input:hover {
+  border-color: var(--fg-muted);
+}
+
+.check input:checked {
+  background-color: var(--accent-blue);
+  border-color: var(--accent-blue);
+  background-size: 100% 100%;
+  /* 内联 SVG 对勾：清晰、无渐变、随尺寸缩放 */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='none' stroke='%23ffffff' stroke-width='2.6' stroke-linecap='square' d='M3 8.4 L6.4 11.8 L13 4.4'/%3E%3C/svg%3E");
+}
+
+.check input:focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: 2px;
+}
+
+/* 并列排布复选框，避免长列表把面板拉得过长 */
+.check-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+@media (min-width: 640px) {
+  .check-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* 分组内的次级标题（如「难度配比」「知识点」） */
+.sub-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fg-muted);
+  margin: 4px 0 6px;
+}
+
+/* ── 题型行 ─────────────────────────────────────────────────────────── */
+
+.type-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.type-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--rule-dark);
+}
+
+.type-row__label {
+  flex: 1 1 auto;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.type-row__num {
+  width: 52px;
+  flex: none;
+}
+
+.type-row__score {
+  width: 46px;
+  flex: none;
+}
+
+.type-row__unit {
+  font-size: 11px;
+  color: var(--fg-muted);
+  flex: none;
+}
+
+.type-row__order {
+  display: flex;
+  gap: 4px;
+  flex: none;
+}
+
+/* 题型排序按钮。
+   早先用的是带下划线的文字链接，太弱 —— 用户看不出这里能点。 */
+.move-btn {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  font-family: var(--font-ui);
+  font-size: 17px;
+  line-height: 1;
+  color: var(--fg);
+  background: var(--bg-panel-raised);
+  border: 1px solid var(--rule-dark);
+  cursor: pointer;
+  transition: background-color var(--switch), color var(--switch),
+              border-color var(--switch);
+}
+
+.move-btn:hover:not(:disabled) {
+  background: var(--fg);
+  color: var(--bg);
+  border-color: var(--fg);
+}
+
+.move-btn:active:not(:disabled) {
+  background: var(--accent-blue);
+  color: var(--fg);
+  border-color: var(--accent-blue);
+}
+
+.move-btn:focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: 2px;
+}
+
+.move-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+/* ── 按钮 ───────────────────────────────────────────────────────────── */
+
+.btn {
+  padding: 12px 32px;                  /* px-8 py-4 */
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;                    /* font-semibold */
+  border: 0;
+  cursor: pointer;
+  white-space: nowrap;
+  background: var(--fg);
+  color: var(--bg);
+  /* 锐利的编辑式切换：直接黑白反色，短促，不用缓动曲线 */
+  transition: background-color var(--switch), color var(--switch);
+}
+
+.btn:hover {
+  background: var(--bg);
+  color: var(--fg);
+  outline: 2px solid var(--fg);
+  outline-offset: -2px;
+}
+
+.btn:active {
+  background: var(--accent-blue);
+  color: var(--fg);
+  outline-color: var(--accent-blue);
+}
+
+.btn:focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: 2px;
+}
+
+.btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.btn:disabled:hover {
+  background: var(--fg);
+  color: var(--bg);
+  outline: none;
+}
+
+.btn--primary {
+  background: var(--accent-blue);
+  color: var(--fg);
+}
+
+.btn--primary:hover {
+  background: var(--fg);
+  color: var(--bg);
+  outline-color: var(--fg);
+}
+
+.btn--ghost {
+  background: transparent;
+  color: inherit;
+  outline: 2px solid var(--rule-dark);
+  outline-offset: -2px;
+  padding: 10px 18px;
+}
+
+.btn--ghost:hover {
+  background: var(--fg);
+  color: var(--bg);
+  outline-color: var(--fg);
+}
+
+.btn--danger {
+  background: var(--accent-red);
+  color: var(--fg);
+}
+
+.btn--danger:hover {
+  background: var(--bg);
+  color: var(--accent-red);
+  outline: 2px solid var(--accent-red);
+  outline-offset: -2px;
+}
+
+/* 文字链接式按钮 */
+.link {
+  background: none;
+  border: 0;
+  padding: 2px 0;
+  font-family: inherit;
+  font-size: 12px;
+  color: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  transition: color var(--switch);
+}
+
+.link:hover {
+  color: var(--accent-blue);
+}
+
+.link:focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: 2px;
+}
+
+/* ── 面板底部操作区 ────────────────────────────────────────────────── */
+
+.panel__foot {
+  flex: 0 0 auto;
+  padding: 14px 24px;
+  background: var(--bg-panel);
+  border-top: 1px solid var(--rule-dark);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+@media (min-width: 1024px) {
+  .panel__foot {
+    padding: 14px 64px;
+  }
+}
+
+.foot-links {
+  display: flex;
+  gap: 14px;
+  margin-left: auto;
+}
+
+/* ── 预览面板 ───────────────────────────────────────────────────────── */
+
+.panel__head--preview {
+  background: var(--paper);
+  border-bottom: 1px solid var(--rule);
+}
+
+.preview-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+/* 试卷 / 答题卡 切换：扁平分段控件，靠边框和底色区分，不用圆角 */
+.segmented {
+  display: inline-flex;
+  border: 1px solid var(--rule);
+}
+
+.segmented__item {
+  padding: 5px 16px;
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink-muted);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  transition: background-color var(--switch), color var(--switch);
+}
+
+.segmented__item + .segmented__item {
+  border-left: 1px solid var(--rule);
+}
+
+.segmented__item:hover {
+  color: var(--ink);
+}
+
+.segmented__item.is-active {
+  background: var(--ink);
+  color: #ffffff;
+}
+
+.segmented__item:focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: 2px;
+}
+
+.stat-line {
+  font-size: 12px;
+  font-family: var(--font-mono);
+  color: var(--ink-muted);
+  letter-spacing: -0.01em;
+}
+
+/* ── 预览：真实 PDF 页面 ────────────────────────────────────────────
+   预览栏渲染的是导出用的那个 PDF（pdf.js），所以版式与文件完全一致；
+   这里只负责把页面排成一列并加上页码标签。 */
+
+.page-view {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+}
+
+.page-view[aria-busy="true"] {
+  opacity: 0.55;
+  transition: opacity var(--switch);
+}
+
+.page {
+  margin: 0;
+  background: #ffffff;
+  /* 用细边框而不是投影：Style Kit 禁用 shadow-* */
+  border: 1px solid var(--rule);
+  line-height: 0;          /* 去掉 canvas 下方的行内间隙 */
+  max-width: 100%;
+}
+
+.page-canvas {
+  display: block;
+  max-width: 100%;
+}
+
+.page__label {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: var(--ink-muted);
+  text-align: center;
+  padding: 5px 0;
+}
+
+.doc__empty {
+  color: var(--ink-muted);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  padding: 40px 0;
+}
+
+.preview-fallback {
+  margin: 16px 0 0;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--ink-muted);
+  text-align: center;
+}
+
+/* ── 进度 ───────────────────────────────────────────────────────────── */
+
+.progress {
+  flex: 0 0 auto;
+  padding: 0 24px 12px;
+  background: var(--paper);
+}
+
+@media (min-width: 1024px) {
+  .progress {
+    padding: 0 64px 12px;
+  }
+}
+
+.progress__track {
+  height: 4px;
+  background: var(--rule);
+  overflow: hidden;
+}
+
+.progress__fill {
+  height: 100%;
+  width: 0;
+  background: var(--ink);
+  transition: width 160ms linear;
+}
+
+.progress__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+
+.progress__msg {
+  font-family: var(--font-mono);
+}
+
+/* ── 提示条 ─────────────────────────────────────────────────────────── */
+
+.notice-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 50;
+  background: var(--bg-panel);
+  color: var(--fg);
+  border-bottom: 2px solid var(--accent-amber);
+  padding: 10px 48px 10px 20px;
+  max-height: 40vh;
+  overflow-y: auto;
+}
+
+.notice-bar[data-kind="error"] {
+  border-bottom-color: var(--accent-red);
+}
+
+.notice-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 12.5px;
+}
+
+.notice-list li {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  max-width: none;
+}
+
+.notice-list .notice__code {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--fg-muted);
+  flex: none;
+}
+
+.notice-close {
+  position: absolute;
+  top: 6px;
+  right: 12px;
+  background: none;
+  border: 0;
+  color: inherit;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 4px 6px;
+}
+
+.notice-close:hover {
+  color: var(--accent-red);
+}
+
+/* ── 历史面板 ───────────────────────────────────────────────────────── */
+
+.sheet {
+  border: 0;
+  padding: 0;
+  width: min(760px, 92vw);
+  max-height: 78vh;
+  background: var(--bg-panel);
+  color: var(--fg);
+}
+
+/* 只有 [open] 时才 display:flex。
+   无条件写 display 会盖掉浏览器默认的
+   `dialog:not([open]) { display: none }`，对话框会从页面加载起就
+   一直浮在界面上（这跟前面 [hidden] 失效是同一类问题）。
+   居中与遮罩交给 showModal()，这里不插手 margin。 */
+.sheet[open] {
+  display: flex;
+  flex-direction: column;
+}
+
+.sheet::backdrop {
+  background: rgba(0, 0, 0, 0.72);
+}
+
+.sheet__head {
+  position: relative;
+  padding: 20px 48px 12px 24px;
+  border-bottom: 1px solid var(--rule-dark);
+}
+
+.sheet__body {
+  padding: 16px 24px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.sheet__foot {
+  padding: 14px 24px;
+  border-top: 1px solid var(--rule-dark);
+  display: flex;
+  justify-content: flex-end;
+}
+
+.history-row {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--rule-dark);
+  font-size: 12.5px;
+}
+
+.history-row__time {
+  font-family: var(--font-mono);
+  color: var(--fg-muted);
+  flex: none;
+  width: 130px;
+}
+
+.history-row__title {
+  flex: 1 1 auto;
+  font-weight: 600;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.history-row__meta {
+  font-family: var(--font-mono);
+  color: var(--fg-muted);
+  flex: none;
+}
+
+/* ── 状态栏 ─────────────────────────────────────────────────────────── */
+
+/* 状态栏是**正常布局元素**，不是 fixed —— 桌面端由 body 的 flex 布局
+   把它放在最下面一行，永远不会盖住面板底部的操作按钮。 */
+.statusbar {
+  flex: 0 0 auto;
+  padding: 5px 14px;
+  font-size: 11.5px;
+  font-family: var(--font-mono);
+  background: var(--bg);
+  color: var(--fg-muted);
+  border-top: 1px solid var(--rule-dark);
+}
+
+/* ── 无障碍 ─────────────────────────────────────────────────────────── */
+
+:focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: 2px;
+}
+
+/* 动效必须提供 reduced-motion 备选 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+
+  .panel,
+  .split:has(.panel:hover) .panel--preview,
+  .split:has(.panel:hover) .panel--config,
+  .split:has(.panel--config:focus-within) .panel--preview {
+    filter: none !important;   /* 降饱和本身也是动效，一并关闭 */
+  }
+}

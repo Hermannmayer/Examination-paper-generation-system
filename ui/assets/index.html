@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>考试试卷生成系统</title>
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+
+<!-- 全局提示条：warning 与 error 都以数据形式落在界面上，不弹系统对话框 -->
+<div class="notice-bar" id="noticeBar" hidden>
+  <ul class="notice-list" id="noticeList"></ul>
+  <button class="notice-close" id="noticeClose" type="button" aria-label="关闭提示">×</button>
+</div>
+
+<main class="split" id="split">
+
+  <!-- 中央分割线：焦点变化时短暂增强（桌面端可见） -->
+  <div class="split__seam" aria-hidden="true"></div>
+
+  <!-- ══ 配置面板（内容侧） ══ -->
+  <section class="panel panel--config" id="configPanel" aria-label="试卷配置">
+
+    <header class="panel__head">
+      <h1 class="display">考试试卷生成系统</h1>
+      <p class="panel__sub" id="versionLine">正在初始化…</p>
+    </header>
+
+    <div class="panel__body">
+      <form class="form" id="configForm" autocomplete="off">
+
+        <!-- ① 题库 -->
+        <section class="field-group">
+          <h2 class="group-title">① 题库</h2>
+          <div class="row row--file">
+            <input class="input input--file" id="bankPath" type="text" readonly
+                   placeholder="尚未选择题库文件">
+            <button class="btn btn--ghost" id="btnBrowse" type="button">浏览</button>
+            <button class="btn btn--ghost" id="btnTemplateBank" type="button">示例</button>
+            <button class="btn btn--ghost btn--subtle" id="btnClearBank" type="button"
+                    title="卸掉当前题库，方便接着选下一个科目" disabled>清除</button>
+          </div>
+          <p class="hint" id="bankInfo">支持 .xlsx / .xlsm / .csv</p>
+        </section>
+
+        <!-- ② 试卷信息 -->
+        <section class="field-group">
+          <h2 class="group-title">② 试卷信息</h2>
+          <label class="field">
+            <span class="field__label">试卷标题</span>
+            <input class="input" id="examTitle" type="text">
+          </label>
+          <label class="field">
+            <span class="field__label">考生信息</span>
+            <input class="input" id="studentName" type="text">
+          </label>
+          <div class="row">
+            <label class="field field--half">
+              <span class="field__label">考试时间（分钟）</span>
+              <input class="input" id="examTime" type="text" inputmode="numeric" placeholder="留空则不显示">
+            </label>
+            <label class="field field--half">
+              <span class="field__label">纸张</span>
+              <select class="input input--select" id="paperSize">
+                <option value="A4">A4</option>
+                <option value="A3">A3（两张 A4 拼版）</option>
+              </select>
+            </label>
+          </div>
+          <label class="field">
+            <span class="field__label">页眉文字</span>
+            <input class="input" id="headerText" type="text" placeholder="留空则不显示页眉">
+          </label>
+        </section>
+
+        <!-- ③ 组卷方式 -->
+        <section class="field-group">
+          <h2 class="group-title">③ 组卷方式</h2>
+          <label class="field">
+            <span class="field__label">抽取方式</span>
+            <select class="input input--select" id="exportMode">
+              <option value="随机抽取">随机抽取 — 按题量随机抽</option>
+              <option value="按比例导出">按比例导出 — 按百分比分配题量</option>
+              <option value="顺序导出">顺序导出 — 按题号范围选取</option>
+            </select>
+          </label>
+
+          <div class="type-list" id="typeList"><!-- 由 JS 生成 --></div>
+
+          <label class="field" id="ratioRow" hidden>
+            <span class="field__label">总题数</span>
+            <input class="input" id="totalQuestions" type="text" inputmode="numeric" value="100">
+          </label>
+
+          <p class="hint" id="modeHint"></p>
+        </section>
+
+        <!-- ④ 筛选条件：题库没有难度/知识点两列时，整组不显示 -->
+        <section class="field-group" id="filterGroup" hidden>
+          <h2 class="group-title">④ 筛选条件（可选）</h2>
+
+          <div id="difficultyGroup" hidden>
+            <h3 class="sub-title">难度配比</h3>
+            <p class="hint">
+              按难度权重分配题量。例如「易 5 / 中 3 / 难 2」表示各难度占
+              50% / 30% / 20%（合计多少都行，会自动按比例换算）。
+              <strong>全部留空 = 不限难度</strong>；某个难度的题不够时会从其他难度借调并提示。
+            </p>
+            <div class="chip-list" id="difficultyList"></div>
+            <p class="hint hint--muted" id="difficultyAvail"></p>
+          </div>
+
+          <div id="knowledgeGroup" hidden>
+            <h3 class="sub-title">知识点</h3>
+            <p class="hint">
+              勾选后只在所选考点内出题，并尽量保证<strong>每个考点至少出现一题</strong>。
+              不勾选 = 不限知识点。适用场景：需要覆盖多个章节的单元测验。
+            </p>
+            <!-- 考点多的题库（几百上千个）靠搜索 + 滚动容器兜住，不会把面板撑爆 -->
+            <input class="input input--search" id="knowledgeSearch" type="text"
+                   placeholder="搜索考点…" hidden>
+            <div class="chip-list chip-list--scroll" id="knowledgeList"></div>
+            <div class="chip-bar">
+              <span class="hint hint--muted" id="knowledgeSelected">未选择（不限知识点）</span>
+              <button class="link" id="knowledgeClear" type="button" hidden>清空</button>
+            </div>
+            <p class="hint hint--muted" id="knowledgeAvail"></p>
+          </div>
+        </section>
+
+        <!-- ⑤ 输出 -->
+        <section class="field-group">
+          <h2 class="group-title">⑤ 输出</h2>
+
+          <div class="row">
+            <label class="field field--half">
+              <span class="field__label">生成份数</span>
+              <input class="input" id="examCount" type="text" inputmode="numeric" value="1">
+            </label>
+            <label class="field field--half">
+              <span class="field__label">题目不够时</span>
+              <select class="input input--select" id="onPoolExhausted">
+                <option value="warn_and_reuse">复用旧题并提示</option>
+                <option value="shrink">少出题并提示</option>
+                <option value="error">直接报错</option>
+              </select>
+            </label>
+          </div>
+
+          <label class="field">
+            <span class="field__label">文件命名</span>
+            <input class="input" id="fileName" type="text" placeholder="试卷">
+          </label>
+          <p class="hint">
+            生成的文件为「<span id="fileNamePreview">试卷</span>-1.docx」这种形式；
+            多份试卷自动编号，改这里可以避免不同批次互相覆盖。
+          </p>
+
+          <div class="check-grid">
+            <label class="check">
+              <input type="checkbox" id="exportDocx" checked>
+              <span>试卷 · Word</span>
+            </label>
+            <label class="check">
+              <input type="checkbox" id="exportPdf">
+              <span>试卷 · PDF <span class="hint hint--inline" id="pdfFontHint"></span></span>
+            </label>
+            <label class="check">
+              <input type="checkbox" id="exportCardDocx">
+              <span>答题卡 · Word</span>
+            </label>
+            <label class="check">
+              <input type="checkbox" id="exportCard">
+              <span>答题卡 · PDF</span>
+            </label>
+          </div>
+          <p class="hint" id="cardHint" hidden></p>
+
+          <div class="row row--file">
+            <input class="input input--file" id="outputDir" type="text" readonly
+                   placeholder="尚未选择导出目录">
+            <button class="btn btn--ghost" id="btnOutputDir" type="button">选择目录</button>
+          </div>
+        </section>
+
+        <section class="field-group">
+          <h2 class="group-title">其他选项</h2>
+          <div class="check-grid">
+            <label class="check">
+              <input type="checkbox" id="includeAnswers">
+              <span>包含参考答案</span>
+            </label>
+            <label class="check">
+              <input type="checkbox" id="randomOrder" checked>
+              <span>题目随机排序</span>
+            </label>
+            <label class="check">
+              <input type="checkbox" id="uniqueAcrossPapers" checked>
+              <span>多份试卷不重复出题</span>
+            </label>
+            <label class="check">
+              <input type="checkbox" id="avoidHistory">
+              <span>排除历史已出过的题</span>
+            </label>
+          </div>
+        </section>
+      </form>
+    </div>
+
+    <footer class="panel__foot">
+      <button class="btn btn--primary" id="btnExport" type="button">导出试卷</button>
+      <button class="btn" id="btnPreview" type="button">刷新预览</button>
+      <div class="foot-links">
+        <button class="link" id="btnSaveTemplate" type="button">保存模板</button>
+        <button class="link" id="btnLoadTemplate" type="button">加载模板</button>
+        <button class="link" id="btnHistory" type="button">历史</button>
+      </div>
+    </footer>
+
+  </section>
+
+  <!-- ══ 预览面板（视觉侧） ══ -->
+  <section class="panel panel--preview" id="previewPanel" aria-label="试卷预览">
+
+    <header class="panel__head panel__head--preview">
+      <div class="preview-head">
+        <h2 class="display display--sm">预览</h2>
+        <div class="segmented" role="tablist" aria-label="预览对象">
+          <button class="segmented__item is-active" id="previewPaper"
+                  type="button" role="tab" aria-selected="true">试卷</button>
+          <button class="segmented__item" id="previewCard"
+                  type="button" role="tab" aria-selected="false">答题卡</button>
+        </div>
+      </div>
+      <div class="stat-line" id="statLine">—</div>
+    </header>
+
+    <div class="progress" id="progress" hidden>
+      <div class="progress__track"><div class="progress__fill" id="progressFill"></div></div>
+      <div class="progress__row">
+        <span class="progress__msg" id="progressMsg">准备中…</span>
+        <button class="link" id="btnCancelExport" type="button">取消</button>
+      </div>
+    </div>
+
+    <div class="panel__body panel__body--preview">
+      <div class="page-view" id="pageView">
+        <p class="doc__empty" id="previewEmpty">
+          左侧配置完成后，点击「刷新预览」查看试卷。
+        </p>
+      </div>
+      <p class="preview-fallback" id="previewFallback" hidden></p>
+    </div>
+
+  </section>
+
+</main>
+
+<dialog class="sheet" id="historyDialog">
+  <div class="sheet__head">
+    <h2 class="display display--sm">生成历史</h2>
+    <button class="notice-close" id="historyClose" type="button" aria-label="关闭">×</button>
+  </div>
+  <p class="hint" id="historyPath"></p>
+  <div class="sheet__body" id="historyBody"></div>
+  <div class="sheet__foot">
+    <button class="btn btn--danger" id="historyClear" type="button">清空历史</button>
+  </div>
+</dialog>
+
+<div class="statusbar" id="statusbar" role="status">就绪</div>
+
+<!-- 注意：以 file:// 加载时 Chromium 不允许 <script type="module">，
+     所以以下脚本一律是普通脚本，用全局命名空间组织，顺序即依赖顺序。
+     pdf.js 特意选用 3.11.174 —— 这是最后一个提供 UMD 构建的版本，
+     4.x 起只发 ES module，在 file:// 下用不了。 -->
+<script src="js/vendor/pdf.min.js"></script>
+<script src="js/bridge.js"></script>
+<script src="js/dom.js"></script>
+<script src="js/config.js"></script>
+<script src="js/preview.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
