@@ -1,0 +1,80 @@
+name: Build
+
+# 推 tag 时自动出安装包并附到 Release；也可以在 Actions 页面手动触发。
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: 构建 Windows 发行版
+    runs-on: windows-latest
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: 安装依赖
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller pytest pypdf pymupdf
+
+      - name: 运行测试
+        run: pytest tests/ -q
+
+      - name: PyInstaller 构建（onedir）
+        run: pyinstaller --noconfirm --clean packaging/exam.spec
+
+      - name: 打包产物冒烟自检
+        shell: pwsh
+        run: |
+          # 这一步是关键：某些依赖只在运行时的冷路径上才被 import
+          # （例如 openpyxl 会 import numpy），开发机上的单元测试跑不到，
+          # 必须在**真实产物**上验一遍。字体缺失会被判为「跳过」而非失败。
+          $report = Join-Path $env:TEMP "selftest.txt"
+          $env:EXAM_SELFTEST = $report
+          & "dist\ExamPaperGenerator\ExamPaperGenerator.exe"
+          $code = $LASTEXITCODE
+          Get-Content $report -Encoding UTF8
+          if ($code -ne 0) { throw "打包自检未通过" }
+
+      - name: 安装 Inno Setup
+        run: choco install innosetup --yes --no-progress
+        shell: pwsh
+
+      - name: 生成安装包
+        shell: pwsh
+        run: |
+          $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { throw "找不到 ISCC.exe" }
+          & $iscc "packaging\installer.iss"
+          Get-ChildItem dist -Filter "*安装包*.exe" | Format-Table Name, Length
+
+      - name: 上传构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: ExamPaperGenerator-windows
+          path: |
+            dist/ExamPaperGenerator/**
+            dist/*安装包*.exe
+          if-no-files-found: error
+
+      - name: 附到 Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*安装包*.exe
+          generate_release_notes: true
+          draft: false
