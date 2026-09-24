@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# 虚拟环境
+.venv/
+venv/
+env/
+
+# 测试与缓存
+.pytest_cache/
+.coverage
+htmlcov/
+
+# 构建产物
+build/
+dist/
+*.spec.bak
+packaging/output/
+
+# WebView2 引导程序（体积大，按需下载，不入库）
+packaging/webview2/
+
+# 编辑器
+.vscode/
+.idea/
+*.swp
+
+# 本机专属的助手权限配置（.claude/launch.json 是有用的共享配置，保留）
+.claude/settings.local.json
+
+# 图标生成的中间产物（tools/make_icon.py 可重新生成）
+packaging/app-preview.png
+
+# 临时文件（审计/调试脚本）
+_audit_*.py
+_b*.xlsx
+
+# 样例产物（由 app.cli 生成）
+样例输出/
