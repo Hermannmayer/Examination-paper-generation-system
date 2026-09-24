@@ -32,7 +32,10 @@ UninstallDisplayIcon={app}\{#AppExe}
 ; 快捷方式会自动沿用，所以这里只需管安装程序。
 SetupIconFile=app.ico
 OutputDir=..\dist
-OutputBaseFilename={#AppName}-{#AppVersion}-安装包
+; 输出文件名刻意用 ASCII —— GitHub Release 上传时不处理非 ASCII 文件名，
+; 中文会被整个剥掉（实测 考试试卷生成系统-1.0.0-安装包.exe 变成 -1.0.0-.exe）。
+; 安装包内部的应用名、开始菜单快捷方式仍然是中文（见 AppName）。
+OutputBaseFilename=ExamPaperGenerator-{#AppVersion}-setup
 Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern

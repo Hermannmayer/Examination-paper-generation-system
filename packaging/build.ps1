@@ -99,7 +99,7 @@ if (-not $Iscc) {
 & $Iscc (Join-Path $PackagingDir 'installer.iss')
 if ($LASTEXITCODE -ne 0) { throw "Inno Setup 编译失败" }
 
-$Installer = Get-ChildItem (Join-Path $ProjectRoot 'dist') -Filter '*安装包*.exe' |
+$Installer = Get-ChildItem (Join-Path $ProjectRoot 'dist') -Filter 'ExamPaperGenerator-*-setup.exe' |
     Sort-Object LastWriteTime -Descending | Select-Object -First 1
 if ($Installer) {
     $Mb = [Math]::Round($Installer.Length / 1MB, 1)
