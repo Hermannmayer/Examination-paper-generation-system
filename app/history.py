@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import os
 import tempfile
+import uuid
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from typing import Dict, List, Optional, Set
@@ -150,7 +151,11 @@ def record(
     """追加一条记录。"""
     stamp = when or datetime.now()
     entry = HistoryEntry(
-        id=stamp.strftime("%Y%m%d%H%M%S%f"),
+        # 用 uuid 而不是时间戳：时间戳依赖微秒精度，而 Windows 的计时器粒度
+        # 可以粗到十几毫秒（CI runner、虚拟机尤甚），两次连续调用会拿到
+        # 同一个值，产生重复 ID —— 那样删一条会连带删掉另一条。
+        # 实测在 GitHub 的 Windows runner 上必现。
+        id=uuid.uuid4().hex[:16],
         time=stamp.isoformat(timespec="seconds"),
         exam_title=exam_title,
         exam_count=int(exam_count),

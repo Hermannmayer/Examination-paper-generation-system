@@ -56,6 +56,24 @@ def test_delete_by_id(hist):
     assert history_module.delete(["不存在"]) == 0
 
 
+def test_ids_are_unique_even_with_a_coarse_clock(hist):
+    """ID 不能依赖时钟精度。
+
+    Windows 的计时器粒度可以粗到十几毫秒（CI runner、虚拟机尤甚），
+    连续调用会拿到同一个微秒值。早先用时间戳做 ID，在 GitHub 的
+    Windows runner 上必现重复 —— 删一条会连带删掉另一条。
+    """
+    entries = [
+        history_module.record(f"卷{i}", 1, i, [f"q{i}"]) for i in range(50)
+    ]
+    ids = [entry.id for entry in entries]
+    assert len(set(ids)) == len(ids), f"ID 出现重复：{len(ids) - len(set(ids))} 个"
+
+    # 重复 ID 的后果：删一条会误删多条
+    assert history_module.delete([ids[0]]) == 1
+    assert len(history_module.load_entries()) == 49
+
+
 def test_corrupt_file_does_not_crash(hist):
     hist.write_text("{ 这不是合法 JSON", encoding="utf-8")
 
