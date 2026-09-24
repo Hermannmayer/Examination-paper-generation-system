@@ -8,6 +8,8 @@
 **适合谁用**：要自己出卷的老师、培训机构、企业内部考核。把手头整理好的题目放进
 Excel，几分钟出一套卷子，不用手工排版。
 
+> English version: [README.en.md](README.en.md)
+
 ---
 
 ## 目录
