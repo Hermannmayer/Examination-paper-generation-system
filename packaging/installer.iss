@@ -109,6 +109,10 @@ end;
 
 { 装完后若 WebView2 仍缺失，给出可操作的提示而不是让用户对着白屏发呆 }
 procedure CurStepChanged(CurStep: TSetupStep);
+var
+  { ShellExec 的最后一个参数是 var ErrorCode: Integer，必须自己声明。
+    它不是 Inno 的预定义变量。 }
+  ErrorCode: Integer;
 begin
   if (CurStep = ssPostInstall) and (not WebView2Installed) then
   begin
